@@ -126,6 +126,41 @@ class GitDirectoryHandler(object):
 
         )
 
+    def resolve_conflicts(self):
+        status_data = self.parse_status(self.repo.git.status('--porcelain'))
+        if len(status_data)>0:
+            print(status_data)
+            for status, file_path in status_data:
+                if status in ['UU', 'AA', 'AU', 'UA']:
+                    remote_commit = self.repo.commit('FETCH_HEAD')
+                    local_commit = self.repo.commit('HEAD')
+                    file_name, file_ext = os.path.splitext(file_path)
+                    self.repo.git.checkout('--theirs', file_path)
+                    if os.path.isfile(os.path.join(self.path, file_path)):
+
+                        os.rename(os.path.join(self.path, file_path),
+                                  os.path.join(self.path, self.get_resolved_file_name(
+                                      name=file_name,
+                                      ext=file_ext,
+                                      commit=remote_commit
+                                  )))
+                    self.repo.git.checkout('--ours', file_path)
+                    if os.path.isfile(os.path.join(self.path, file_path)):
+                        os.rename(os.path.join(self.path, file_path),
+                                  os.path.join(self.path, self.get_resolved_file_name(
+                                      name=file_name,
+                                      ext=file_ext,
+                                      commit=local_commit
+                                  )))
+                    self.repo.git.checkout('ORIG_HEAD', file_path)
+                elif status in ['DU']:
+                    pass
+                elif status in ['UD']:
+                    self.repo.git.checkout('--ours', file_path)
+            self.repo.git.add('.')
+            self.repo.git.update_environment(GIT_AUTHOR_NAME='syncer', GIT_AUTHOR_EMAIL='syncer@test.com')
+            self.repo.git.commit('-m', 'fix conflicts')
+
     def process_changes(self,  comment=''):
         if self.repo.is_dirty(index=True, working_tree=True, untracked_files=True):
             self.repo.git.add('.')
@@ -137,48 +172,13 @@ class GitDirectoryHandler(object):
             author.email = 'admin@test.com'
             self.repo.index.commit(comment, committer=committer, author=author)
             if len(self.repo.remotes) > 0:
+                self.repo.git.fetch('origin', 'master')
                 try:
-                    self.repo.git.pull('origin', 'master')
+                    self.repo.git.merge('FETCH_HEAD')
                 except:
                     traceback.print_exc()
 
-                status_data = self.parse_status(self.repo.git.status('--porcelain'))
-                if len(status_data)>0:
-                    print(status_data)
-                    for status, file_path in status_data:
-                        if status in ['UU', 'AA', 'AU', 'UA']:
-                            remote_commit = self.repo.commit('FETCH_HEAD')
-                            local_commit = self.repo.commit('HEAD')
-                            file_name, file_ext = os.path.splitext(file_path)
-                            self.repo.git.checkout('--theirs', file_path)
-                            if os.path.isfile(os.path.join(self.path, file_path)):
-
-                                os.rename(os.path.join(self.path, file_path),
-                                          os.path.join(self.path, self.get_resolved_file_name(
-                                              name=file_name,
-                                              ext=file_ext,
-                                              commit=remote_commit
-                                          )))
-                            self.repo.git.checkout('--ours', file_path)
-                            if os.path.isfile(os.path.join(self.path, file_path)):
-                                os.rename(os.path.join(self.path, file_path),
-                                          os.path.join(self.path, self.get_resolved_file_name(
-                                              name=file_name,
-                                              ext=file_ext,
-                                              commit=local_commit
-                                          )))
-                            self.repo.git.checkout('ORIG_HEAD', file_path)
-                        elif status in ['DU']:
-                            pass
-                        elif status in ['UD']:
-                            self.repo.git.checkout('--ours', file_path)
-                    self.repo.git.add('.')
-                    committer = git.Actor.committer()
-                    committer.name = 'syncer'
-                    committer.email = 'syncer@test.com'
-                    self.repo.git.commit('-m', comment)
-                    #self.repo.index.commit(comment, committer=committer)
-
+                self.resolve_conflicts()
                 self.repo.git.push('origin', 'master')
 
 
