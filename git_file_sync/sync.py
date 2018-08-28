@@ -20,6 +20,33 @@ EVENTS_ABBR = {
     'moved': '=>'
 }
 
+#  ignore patterns from
+#  https://github.com/hbons/SparkleShare/blob/master/Sparkles/BaseFetcher.cs#L257
+
+IGNORE_PATTERNS = [
+    "*.git*"
+    "*.autosave", 
+    "*~",  # gedit and emacs
+    ".~lock.*",  # LibreOffice
+    "*.part", "*.crdownload",  # Firefox and Chromium temporary download files
+    ".*.sw[a-z]", "*.un~", "*.swp", "*.swo",  # vi(m)
+    ".directory",  # KDE
+    "*.kate-swp",  # Kate
+    ".DS_Store", "Icon\r", "._*", ".Spotlight-V100", ".Trashes",  # Mac OS X
+    "*(Autosaved).graffle",  # Omnigraffle
+    "Thumbs.db", "Desktop.ini",  # Windows
+    "~*.tmp", "~*.TMP", "*~*.tmp", "*~*.TMP",  # MS Office
+    "~*.ppt", "~*.PPT", "~*.pptx", "~*.PPTX",
+    "~*.xls", "~*.XLS", "~*.xlsx", "~*.XLSX",
+    "~*.doc", "~*.DOC", "~*.docx", "~*.DOCX",
+    "~$*",
+    "*.a$v",  # QuarkXPress
+    "*/CVS/*", ".cvsignore", "*/.cvsignore",  # CVS
+    "/.svn/*", "*/.svn/*",  # Subversion
+    "/.hg/*", "*/.hg/*", "*/.hgignore",  # Mercurial
+    "/.bzr/*", "*/.bzr/*", "*/.bzrignore",  # Bazaar
+    "*<*", "*>*", "*:*", "*\"*", "*|*", "*\\?*", "*\\**", "*\\\\*"
+]
 
 class MyEventHandler(PatternMatchingEventHandler):
     def __init__(self, parent=None, **kwargs):
@@ -32,7 +59,7 @@ class MyEventHandler(PatternMatchingEventHandler):
 
 class GitWatcher(object):
     def __init__(self, path=None, events_timeout=1, notifier=None):
-        self.event_handler = MyEventHandler(ignore_patterns=['*.git*'], parent=self)
+        self.event_handler = MyEventHandler(ignore_patterns=IGNORE_PATTERNS, parent=self)
         self.path = path
         self.events_timeout = events_timeout
         self.observer = Observer()
@@ -119,7 +146,6 @@ class GitWatcher(object):
         self.observer.join()
 
 
-
 class GitDirectoryHandler(object):
     def __init__(self, path=None, parent=None):
         self.path = path
@@ -134,7 +160,7 @@ class GitDirectoryHandler(object):
         result = []
         for status_line in status_data.split('\n'):
             if ' ' in status_line:
-                result.append(status_line.split(' '))
+                result.append((status_line[:2], status_line[3:]))
         return result
 
     @staticmethod
