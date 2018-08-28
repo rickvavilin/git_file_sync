@@ -1,5 +1,5 @@
 from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler, DirModifiedEvent
+from watchdog.events import PatternMatchingEventHandler
 from threading import Thread
 import datetime
 import git
@@ -19,6 +19,7 @@ EVENTS_ABBR = {
     'deleted': '-',
     'moved': '=>'
 }
+
 
 class MyEventHandler(PatternMatchingEventHandler):
     def __init__(self, parent=None, **kwargs):
@@ -56,18 +57,20 @@ class GitWatcher(object):
                 if (datetime.datetime.now()-last_event['timestamp']).total_seconds() > self.events_timeout:
                     self.process_events()
 
-    def touch(self, path):
+    @staticmethod
+    def touch(path):
         with open(path, 'w'):
             pass
 
-    def get_empty_file_path(self, path):
+    @staticmethod
+    def get_empty_file_path(path):
         return os.path.join(path, '.empty')
 
     def handle_empty_directory(self, path):
         dir_list = os.listdir(path)
-        if len(dir_list)==0:
+        if len(dir_list) == 0:
             self.touch(self.get_empty_file_path(path))
-        elif os.path.isfile(self.get_empty_file_path(path)) and len(dir_list)>1:
+        elif os.path.isfile(self.get_empty_file_path(path)) and len(dir_list) > 1:
             os.unlink(self.get_empty_file_path(path))
 
     def process_events(self):
@@ -110,14 +113,16 @@ class GitDirectoryHandler(object):
             git.Repo.init(path)
         self.repo = git.Repo(path)
 
-    def parse_status(self, status_data):
+    @staticmethod
+    def parse_status(status_data):
         result = []
         for status_line in status_data.split('\n'):
             if ' ' in status_line:
                 result.append(status_line.split(' '))
         return result
 
-    def get_resolved_file_name(self, name, ext, commit):
+    @staticmethod
+    def get_resolved_file_name(name, ext, commit):
         return '{name} [{author_name}, {date}] {ext}'.format(
             name=name,
             ext=ext,
@@ -128,7 +133,7 @@ class GitDirectoryHandler(object):
 
     def resolve_conflicts(self):
         status_data = self.parse_status(self.repo.git.status('--porcelain'))
-        if len(status_data)>0:
+        if len(status_data) > 0:
             print(status_data)
             for status, file_path in status_data:
                 if status in ['UU', 'AA', 'AU', 'UA']:
@@ -158,7 +163,8 @@ class GitDirectoryHandler(object):
                 elif status in ['UD']:
                     self.repo.git.checkout('--ours', file_path)
             self.repo.git.add('.')
-            self.repo.git.update_environment(GIT_AUTHOR_NAME='syncer', GIT_AUTHOR_EMAIL='syncer@test.com')
+            self.repo.git.update_environment(GIT_AUTHOR_NAME='git-synchronizer',
+                                             GIT_AUTHOR_EMAIL='synchronizer@test.com')
             self.repo.git.commit('-m', 'fix conflicts')
 
     def process_changes(self,  comment=''):
@@ -175,10 +181,8 @@ class GitDirectoryHandler(object):
                 self.repo.git.fetch('origin', 'master')
                 try:
                     self.repo.git.merge('FETCH_HEAD')
-                except:
+                except git.GitCommandError:
                     traceback.print_exc()
 
                 self.resolve_conflicts()
                 self.repo.git.push('origin', 'master')
-
-
