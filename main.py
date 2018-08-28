@@ -1,10 +1,13 @@
 __author__ = 'Aleksandr Vavilin'
-from git_file_sync import api
+from git_file_sync import sync, redis_notify
 import os
 import time
+import sys
 
 if __name__ == '__main__':
-    watcher = api.GitWatcher(os.path.abspath('data'))
+    redis_notifier = redis_notify.RedisNotifier()
+    redis_notifier.start()
+    watcher = sync.GitWatcher(os.path.abspath(sys.argv[1]), notifier=redis_notifier)
     watcher.start()
     try:
         while True:

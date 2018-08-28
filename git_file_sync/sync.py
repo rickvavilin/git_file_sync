@@ -31,7 +31,7 @@ class MyEventHandler(PatternMatchingEventHandler):
 
 
 class GitWatcher(object):
-    def __init__(self, path=None, events_timeout=1):
+    def __init__(self, path=None, events_timeout=1, notifier=None):
         self.event_handler = MyEventHandler(ignore_patterns=['*.git*'], parent=self)
         self.path = path
         self.events_timeout = events_timeout
@@ -40,8 +40,18 @@ class GitWatcher(object):
         self.observer.start()
         self.events_list = []
         self.stopped = False
-        self.git_handler = GitDirectoryHandler(path=self.path)
+        self.git_handler = GitDirectoryHandler(path=self.path, parent=self)
         self._thread = Thread(target=self._run)
+        self.notifier = notifier
+        if self.notifier:
+            self.notifier.parent = self
+
+    def on_notify(self, message):
+        print(message)
+        self.git_handler.update_from_remote()
+
+    def on_push(self):
+        self.notifier.send_notify('hello')
 
     def on_any_event(self, event):
         self.events_list.append({
@@ -99,15 +109,21 @@ class GitWatcher(object):
     def stop(self):
         self.stopped = True
         self._thread.join()
+        self.observer.stop()
+        self.observer.join()
+        if self.notifier:
+            self.notifier.stop()
 
     def __del__(self):
         self.observer.stop()
         self.observer.join()
 
 
+
 class GitDirectoryHandler(object):
-    def __init__(self, path=None):
+    def __init__(self, path=None, parent=None):
         self.path = path
+        self.parent = parent
         if not os.path.isdir(os.path.join(self.path, '.git')):
             print('create repo')
             git.Repo.init(path)
@@ -167,6 +183,15 @@ class GitDirectoryHandler(object):
                                              GIT_AUTHOR_EMAIL='synchronizer@test.com')
             self.repo.git.commit('-m', 'fix conflicts')
 
+    def update_from_remote(self):
+        if len(self.repo.remotes) > 0:
+            self.repo.git.fetch('origin', 'master')
+            try:
+                self.repo.git.merge('FETCH_HEAD')
+            except git.GitCommandError:
+                traceback.print_exc()
+            self.resolve_conflicts()
+
     def process_changes(self,  comment=''):
         if self.repo.is_dirty(index=True, working_tree=True, untracked_files=True):
             self.repo.git.add('.')
@@ -178,11 +203,7 @@ class GitDirectoryHandler(object):
             author.email = 'admin@test.com'
             self.repo.index.commit(comment, committer=committer, author=author)
             if len(self.repo.remotes) > 0:
-                self.repo.git.fetch('origin', 'master')
-                try:
-                    self.repo.git.merge('FETCH_HEAD')
-                except git.GitCommandError:
-                    traceback.print_exc()
-
-                self.resolve_conflicts()
+                self.update_from_remote()
                 self.repo.git.push('origin', 'master')
+                if self.parent:
+                    self.parent.on_push()
