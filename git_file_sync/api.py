@@ -5,6 +5,7 @@ import datetime
 import git
 import time
 import os
+import traceback
 __author__ = 'Aleksandr Vavilin'
 
 EVENTS_PRIORITIES = {
@@ -104,21 +105,80 @@ class GitWatcher(object):
 class GitDirectoryHandler(object):
     def __init__(self, path=None):
         self.path = path
+        if not os.path.isdir(os.path.join(self.path, '.git')):
+            print('create repo')
+            git.Repo.init(path)
         self.repo = git.Repo(path)
-        if not os.path.isdir(os.path.join('.git')):
-            self.repo.init(path)
+
+    def parse_status(self, status_data):
+        result = []
+        for status_line in status_data.split('\n'):
+            if ' ' in status_line:
+                result.append(status_line.split(' '))
+        return result
+
+    def get_resolved_file_name(self, name, ext, commit):
+        return '{name} [{author_name}, {date}] {ext}'.format(
+            name=name,
+            ext=ext,
+            author_name=commit.author.name,
+            date=datetime.datetime.fromtimestamp(commit.committed_date).strftime('%d-%m-%Y %H-%M-%S')
+
+        )
 
     def process_changes(self,  comment=''):
         if self.repo.is_dirty(index=True, working_tree=True, untracked_files=True):
             self.repo.git.add('.')
             committer = git.Actor.committer()
-            committer.name = 'admin'
+            committer.name = 'Александр Вавилин'
             committer.email = 'admin@test.com'
-            self.repo.index.commit(comment, committer=committer)
+            author = git.Actor.author()
+            author.name = 'Александр Вавилин'
+            author.email = 'admin@test.com'
+            self.repo.index.commit(comment, committer=committer, author=author)
             if len(self.repo.remotes) > 0:
-                origin = self.repo.remotes['origin']
-                print(origin.fetch())
-                
+                try:
+                    self.repo.git.pull('origin', 'master')
+                except:
+                    traceback.print_exc()
+
+                status_data = self.parse_status(self.repo.git.status('--porcelain'))
+                if len(status_data)>0:
+                    print(status_data)
+                    for status, file_path in status_data:
+                        if status in ['UU', 'AA', 'AU', 'UA']:
+                            remote_commit = self.repo.commit('FETCH_HEAD')
+                            local_commit = self.repo.commit('HEAD')
+                            file_name, file_ext = os.path.splitext(file_path)
+                            self.repo.git.checkout('--theirs', file_path)
+                            if os.path.isfile(os.path.join(self.path, file_path)):
+
+                                os.rename(os.path.join(self.path, file_path),
+                                          os.path.join(self.path, self.get_resolved_file_name(
+                                              name=file_name,
+                                              ext=file_ext,
+                                              commit=remote_commit
+                                          )))
+                            self.repo.git.checkout('--ours', file_path)
+                            if os.path.isfile(os.path.join(self.path, file_path)):
+                                os.rename(os.path.join(self.path, file_path),
+                                          os.path.join(self.path, self.get_resolved_file_name(
+                                              name=file_name,
+                                              ext=file_ext,
+                                              commit=local_commit
+                                          )))
+                            self.repo.git.checkout('ORIG_HEAD', file_path)
+                        elif status in ['DU']:
+                            pass
+                        elif status in ['UD']:
+                            self.repo.git.checkout('--ours', file_path)
+                    self.repo.git.add('.')
+                    committer = git.Actor.committer()
+                    committer.name = 'syncer'
+                    committer.email = 'syncer@test.com'
+                    self.repo.git.commit('-m', comment)
+                    #self.repo.index.commit(comment, committer=committer)
+
                 self.repo.git.push('origin', 'master')
 
 
