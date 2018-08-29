@@ -44,8 +44,8 @@ IGNORE_PATTERNS = [
     "*/CVS/*", ".cvsignore", "*/.cvsignore",  # CVS
     "/.svn/*", "*/.svn/*",  # Subversion
     "/.hg/*", "*/.hg/*", "*/.hgignore",  # Mercurial
-    "/.bzr/*", "*/.bzr/*", "*/.bzrignore",  # Bazaar
-    "*<*", "*>*", "*:*", "*\"*", "*|*", "*\\?*", "*\\**", "*\\\\*"
+    "/.bzr/*", "*/.bzr/*", "*/.bzrignore"  # Bazaar
+
 ]
 
 
