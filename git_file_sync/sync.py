@@ -24,8 +24,8 @@ EVENTS_ABBR = {
 #  https://github.com/hbons/SparkleShare/blob/master/Sparkles/BaseFetcher.cs#L257
 
 IGNORE_PATTERNS = [
-    "*.git*"
-    "*.autosave", 
+    "*.git*",
+    "*.autosave",
     "*~",  # gedit and emacs
     ".~lock.*",  # LibreOffice
     "*.part", "*.crdownload",  # Firefox and Chromium temporary download files
@@ -47,6 +47,7 @@ IGNORE_PATTERNS = [
     "/.bzr/*", "*/.bzr/*", "*/.bzrignore",  # Bazaar
     "*<*", "*>*", "*:*", "*\"*", "*|*", "*\\?*", "*\\**", "*\\\\*"
 ]
+
 
 class MyEventHandler(PatternMatchingEventHandler):
     def __init__(self, parent=None, **kwargs):
@@ -121,12 +122,13 @@ class GitWatcher(object):
                 modified_paths[event['event'].src_path] = event['event']
         modified_files = []
         for k, v in modified_paths.items():
+            print(k, v)
             if v.is_directory and os.path.isdir(k):
                 self.handle_empty_directory(k)
             if os.path.basename(k) == '.empty' or (v.is_directory and v.event_type == 'modified'):
                 continue
             modified_files.append('[{} {}]'.format(EVENTS_ABBR.get(v.event_type), os.path.relpath(k, self.path)))
-        self.git_handler.process_changes(comment=' '.join(modified_files))
+        self.git_handler.process_changes()
 
         self.events_list = []
 
@@ -154,13 +156,17 @@ class GitDirectoryHandler(object):
             print('create repo')
             git.Repo.init(path)
         self.repo = git.Repo(path)
+        with open(os.path.join(self.path, '.git', 'info', 'exclude'), 'w') as f:
+            for pattern in IGNORE_PATTERNS:
+                f.write(pattern+'\n')
 
     @staticmethod
     def parse_status(status_data):
         result = []
-        for status_line in status_data.split('\n'):
+        for status_line in status_data.split('\x00'):
             if ' ' in status_line:
-                result.append((status_line[:2], status_line[3:]))
+                file_name = status_line[3:]
+                result.append((status_line[:2], file_name))
         return result
 
     @staticmethod
@@ -174,7 +180,7 @@ class GitDirectoryHandler(object):
         )
 
     def resolve_conflicts(self):
-        status_data = self.parse_status(self.repo.git.status('--porcelain'))
+        status_data = self.parse_status(self.repo.git.status('--porcelain', '-z'))
         if len(status_data) > 0:
             print(status_data)
             for status, file_path in status_data:
@@ -218,8 +224,10 @@ class GitDirectoryHandler(object):
                 traceback.print_exc()
             self.resolve_conflicts()
 
-    def process_changes(self,  comment=''):
+    def process_changes(self):
         if self.repo.is_dirty(index=True, working_tree=True, untracked_files=True):
+            status_lines = self.parse_status(self.repo.git.status('--porcelain', '-z'))
+            comment = ' '.join(['[ {} {} ]'.format(sl[0], sl[1]) for sl in status_lines])
             self.repo.git.add('.')
             committer = git.Actor.committer()
             committer.name = 'Александр Вавилин'
@@ -227,6 +235,7 @@ class GitDirectoryHandler(object):
             author = git.Actor.author()
             author.name = 'Александр Вавилин'
             author.email = 'admin@test.com'
+            print(comment)
             self.repo.index.commit(comment, committer=committer, author=author)
             if len(self.repo.remotes) > 0:
                 self.update_from_remote()
