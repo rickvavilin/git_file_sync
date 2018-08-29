@@ -59,7 +59,7 @@ class MyEventHandler(PatternMatchingEventHandler):
 
 
 class GitWatcher(object):
-    def __init__(self, path=None, events_timeout=1, notifier=None):
+    def __init__(self, path=None, events_timeout=1, notifier=None, notify_callback=None):
         self.event_handler = MyEventHandler(ignore_patterns=IGNORE_PATTERNS, parent=self)
         self.path = path
         self.events_timeout = events_timeout
@@ -71,15 +71,22 @@ class GitWatcher(object):
         self.git_handler = GitDirectoryHandler(path=self.path, parent=self)
         self._thread = Thread(target=self._run)
         self.notifier = notifier
+        self.notify_callback = notify_callback
         if self.notifier:
             self.notifier.parent = self
 
     def on_notify(self, message):
         print(message)
+        if self.notify_callback:
+            self.notify_callback('Синхронизация с сервером')
         self.git_handler.update_from_remote()
+        if self.notify_callback:
+            self.notify_callback('Синхронизация с сервером выполнена')
 
     def on_push(self):
         self.notifier.send_notify('hello')
+        if self.notify_callback:
+            self.notify_callback('Отправка файлов')
 
     def on_any_event(self, event):
         self.events_list.append({

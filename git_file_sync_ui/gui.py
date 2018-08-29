@@ -41,9 +41,9 @@ class MainWindow(QMainWindow):
             hide - скрыть окно
             exit - выход из программы
         '''
-        show_action = QAction("Show", self)
-        quit_action = QAction("Exit", self)
-        hide_action = QAction("Hide", self)
+        show_action = QAction("Показать", self)
+        quit_action = QAction("Выход", self)
+        hide_action = QAction("Скрыть", self)
         show_action.triggered.connect(self.show)
         hide_action.triggered.connect(self.hide)
         quit_action.triggered.connect(qApp.quit)
@@ -68,11 +68,15 @@ class MainWindow(QMainWindow):
             )
 
 
-def main():
+def init():
     import sys
 
     app = QApplication(sys.argv)
     app.setApplicationName('GitSync')
     mw = MainWindow()
     mw.show()
-    sys.exit(app.exec())
+    return app, mw
+
+
+def exec_app(app):
+    app.exec()
